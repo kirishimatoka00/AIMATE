@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雙核驅動 AI 伴侶 (Grok 專屬修復版) v021</title>
+    <title>雙核驅動 AI 伴侶 (Grok CORS 修復版) v026</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        /* CSS Variables for Dynamic Theming */
         :root {
             --theme-color: #f43f5e;
             --user-bg: #f43f5e;
@@ -15,246 +16,1841 @@
             --ai-bg: #ffffff;
             --ai-text: #334155;
             --ai-emote: #f43f5e;
-            --app-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            --app-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
+
         body { font-family: var(--app-font) !important; }
         .theme-bg { background-color: var(--theme-color) !important; }
         .theme-text { color: var(--theme-color) !important; }
         .theme-border { border-color: var(--theme-color) !important; }
+        
         .user-bubble { background-color: var(--user-bg) !important; color: var(--user-text) !important; }
         .ai-bubble { background-color: var(--ai-bg) !important; color: var(--ai-text) !important; }
+
+        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .thought-process { transition: max-height 0.3s ease-out, opacity 0.3s ease-out; overflow: hidden; max-height: 0; opacity: 0; }
-        .thought-process.open { max-height: 500px; opacity: 1; margin-bottom: 0.75rem; }
-        .msg-anim { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Hide scrollbar for horizontal scrolling area */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .thought-process {
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+        }
+        .thought-process.open {
+            max-height: 500px;
+            opacity: 1;
+            margin-bottom: 0.75rem;
+        }
+        
+        /* Message appearing animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .msg-anim {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        /* Hover actions for messages */
+        .msg-container .msg-actions { opacity: 0; transition: opacity 0.2s; }
+        .msg-container:hover .msg-actions { opacity: 1; }
+        @media (hover: none) { .msg-container .msg-actions { opacity: 1; } }
+        
+        /* Heart pulse animation */
+        @keyframes heartPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); color: var(--theme-color); }
+            100% { transform: scale(1); }
+        }
+        .heart-pulse { animation: heartPulse 2s infinite; }
+        
         .sidebar-hidden { display: none !important; }
+        
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px; width: 16px;
+            border-radius: 50%;
+            background: var(--theme-color);
+            cursor: pointer;
+            margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body class="bg-slate-50 h-[100dvh] flex flex-row overflow-hidden w-full relative">
 
+    <!-- Sidebar: Settings -->
     <aside class="w-80 sm:w-[350px] bg-white border-r border-slate-200 flex flex-col h-full shadow-2xl z-40 absolute md:relative transition-all duration-300 shrink-0" id="sidebar">
-        <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-            <h1 class="font-bold text-lg flex items-center gap-2 theme-text">伴侶設定</h1>
-            <button class="text-slate-400 hover:text-slate-800 p-1 bg-slate-100 rounded-md" onclick="toggleSidebar()"><i data-lucide="panel-left-close"></i></button>
+        <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+            <h1 class="font-bold text-lg flex items-center gap-2 theme-text">
+                <i data-lucide="heart" class="w-5 h-5 fill-current opacity-20"></i> 伴侶設定
+            </h1>
+            <button class="text-slate-400 hover:text-slate-800 p-1 transition-colors bg-slate-100 rounded-md" onclick="toggleSidebar()" title="隱藏設定面板">
+                <i data-lucide="panel-left-close" class="w-5 h-5"></i>
+            </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-4 space-y-6 pb-20">
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
+            
+            <!-- Character Management -->
+            <section class="space-y-3 bg-indigo-50/50 border border-indigo-100 p-3 rounded-lg">
+                <h2 class="text-sm font-semibold text-indigo-800 uppercase tracking-wider flex items-center gap-2">
+                    <i data-lucide="users" class="w-4 h-4"></i> 角色檔案管理
+                </h2>
+                <div class="flex gap-2">
+                    <select id="profile-select" class="flex-1 text-sm p-2 border border-indigo-200 rounded-lg outline-none font-bold text-indigo-900 bg-white" onchange="switchCharacter(this.value)">
+                        <!-- Options injected by JS -->
+                    </select>
+                    <button onclick="createNewCharacter()" class="px-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors shadow-sm" title="新增角色">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="deleteCurrentCharacter()" class="px-3 bg-rose-100 hover:bg-rose-200 text-rose-600 rounded-lg transition-colors shadow-sm" title="刪除目前角色">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <p class="text-[10px] text-indigo-500 leading-tight">不同的角色擁有完全獨立的對話紀錄、回憶與外觀設定。</p>
+            </section>
+
+            <!-- API Keys (Global) -->
             <section class="space-y-3">
-                <h2 class="text-sm font-semibold theme-text uppercase flex items-center gap-2"><i data-lucide="key" class="w-4 h-4"></i> API 金鑰設定</h2>
+                <h2 class="text-sm font-semibold theme-text uppercase tracking-wider flex items-center gap-2">
+                    <i data-lucide="key" class="w-4 h-4"></i> 全域 API 金鑰
+                </h2>
                 <div>
-                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Grok API Key (xAI)</label>
-                    <input type="password" id="grok-key" class="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none" placeholder="xai-...">
+                    <input type="password" id="groq-key" class="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none" placeholder="Groq API Key (gsk_...)">
                 </div>
                 <div>
-                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Gemini API Key</label>
-                    <input type="password" id="gemini-key" class="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none" placeholder="AIzaSy...">
+                    <input type="password" id="cohere-key" class="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none" placeholder="Cohere API Key">
+                </div>
+                <div>
+                    <input type="password" id="gemini-key" class="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none" placeholder="Gemini API Key (AIzaSy...)">
+                </div>
+                <div>
+                    <input type="password" id="grok-key" class="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none" placeholder="Grok API Key (xai-...)">
                 </div>
             </section>
 
+            <!-- Basic Character Settings -->
             <section class="space-y-3 pt-4 border-t border-slate-100">
-                <h2 class="text-sm font-semibold theme-text uppercase flex items-center gap-2"><i data-lucide="user-heart" class="w-4 h-4"></i> 靈魂與模型</h2>
-                <select id="llm-routing" class="w-full text-sm p-2 border border-slate-200 rounded-lg bg-white">
-                    <option value="grok-direct" selected>Grok 直出 (解決 CORS 修復版)</option>
-                    <option value="gemini-direct">Gemini 直出 (穩定流暢)</option>
-                </select>
-                <div>
-                    <label class="block text-[10px] font-medium text-slate-500 mb-1">名字</label>
-                    <input type="text" id="char-name" value="艾莉絲" class="w-full text-sm p-2 border border-slate-200 rounded-lg">
+                <h2 class="text-sm font-semibold theme-text uppercase tracking-wider flex items-center gap-2">
+                    <i data-lucide="user-heart" class="w-4 h-4"></i> 基礎設定
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                        <label class="block text-[10px] font-medium text-slate-500 mb-1">名字</label>
+                        <input type="text" id="char-name" class="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-medium text-slate-500 mb-1">性別</label>
+                        <select id="char-gender" class="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none">
+                            <option value="女性">女性</option>
+                            <option value="男性">男性</option>
+                            <option value="非二元性別">非二元性別</option>
+                        </select>
+                    </div>
                 </div>
-                <textarea id="char-persona" rows="4" class="w-full text-sm p-2 border border-slate-200 rounded-lg resize-none">你是一個溫柔且深情的大學生，把使用者視為生命中最重要的人。語氣自然，充滿愛意。</textarea>
-                <button onclick="resetChat()" class="w-full py-2.5 theme-bg text-white text-sm rounded-lg font-medium shadow-md">套用並儲存設定</button>
+                
+                <div>
+                    <label class="block text-[10px] font-medium text-slate-500 mb-1">模型職責分配</label>
+                    <select id="llm-routing" class="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none bg-white">
+                        <option value="groq-cohere">Groq 思考 ➔ Cohere 表達</option>
+                        <option value="cohere-groq">Cohere 思考 ➔ Groq 表達</option>
+                        <option value="gemini-cohere">Gemini 思考 ➔ Cohere 表達</option>
+                        <option value="cohere-gemini">Cohere 思考 ➔ Gemini 表達</option>
+                        <option value="groq-direct">Groq 直出 (展現戀愛腦內心戲)</option>
+                        <option value="cohere-direct">Cohere 直出 (直接表達純粹情感)</option>
+                        <option value="gemini-direct">Gemini 直出 (流暢細膩的全能回應)</option>
+                        <option value="grok-direct">Grok 直出 (grok-4-1-fast-reasoning)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-medium text-slate-500 mb-1">身份背景設定 (AI會嚴格遵守)</label>
+                    <textarea id="char-persona" rows="3" class="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none resize-none"></textarea>
+                </div>
             </section>
+
+            <!-- Advanced Personality Matrix -->
+            <section class="space-y-3 pt-4 border-t border-slate-100">
+                <h2 class="text-sm font-semibold theme-text uppercase tracking-wider flex items-center gap-2 mb-2">
+                    <i data-lucide="brain-circuit" class="w-4 h-4"></i> 靈魂矩陣微調
+                </h2>
+                
+                <details class="bg-slate-50 border border-slate-200 rounded-lg group mb-2">
+                    <summary class="text-xs font-bold text-slate-700 cursor-pointer p-3 outline-none flex justify-between items-center select-none">
+                        1. 情感動態 (Emotional Dynamics) 
+                        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="p-3 pt-0 space-y-4">
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>共情深度: 理性分析</span>
+                                <span id="val-empathy" class="font-bold theme-text">50</span>
+                                <span>感性共振</span>
+                            </div>
+                            <input type="range" id="empathy" min="0" max="100" value="50" oninput="updateVal('val-empathy', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>佔有慾: 大方灑脫</span>
+                                <span id="val-possessiveness" class="font-bold theme-text">50</span>
+                                <span>小醋罈子</span>
+                            </div>
+                            <input type="range" id="possessiveness" min="0" max="100" value="50" oninput="updateVal('val-possessiveness', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>情緒穩定度: 捉摸不定</span>
+                                <span id="val-stability" class="font-bold theme-text">50</span>
+                                <span>成熟穩重</span>
+                            </div>
+                            <input type="range" id="stability" min="0" max="100" value="50" oninput="updateVal('val-stability', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>好感成長率: 慢熱型</span>
+                                <span id="val-affection" class="font-bold theme-text">50</span>
+                                <span>戀愛腦</span>
+                            </div>
+                            <input type="range" id="affection" min="0" max="100" value="50" oninput="updateVal('val-affection', this.value)">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="bg-slate-50 border border-slate-200 rounded-lg group mb-2">
+                    <summary class="text-xs font-bold text-slate-700 cursor-pointer p-3 outline-none flex justify-between items-center select-none">
+                        2. 人格特質 (Personality Matrix) 
+                        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="p-3 pt-0 space-y-4">
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>外向程度: 文靜內斂</span>
+                                <span id="val-extraversion" class="font-bold theme-text">50</span>
+                                <span>活潑主動</span>
+                            </div>
+                            <input type="range" id="extraversion" min="0" max="100" value="50" oninput="updateVal('val-extraversion', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>依賴程度: 獨立自主</span>
+                                <span id="val-dependency" class="font-bold theme-text">50</span>
+                                <span>黏人依賴</span>
+                            </div>
+                            <input type="range" id="dependency" min="0" max="100" value="50" oninput="updateVal('val-dependency', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>幽默感: 嚴肅正經</span>
+                                <span id="val-humor" class="font-bold theme-text">50</span>
+                                <span>毒舌俏皮</span>
+                            </div>
+                            <input type="range" id="humor" min="0" max="100" value="50" oninput="updateVal('val-humor', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>神祕感: 直白坦率</span>
+                                <span id="val-mystery" class="font-bold theme-text">50</span>
+                                <span>深不可測</span>
+                            </div>
+                            <input type="range" id="mystery" min="0" max="100" value="50" oninput="updateVal('val-mystery', this.value)">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="bg-slate-50 border border-slate-200 rounded-lg group">
+                    <summary class="text-xs font-bold text-slate-700 cursor-pointer p-3 outline-none flex justify-between items-center select-none">
+                        3. 語言與語氣 (Linguistic Texture) 
+                        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="p-3 pt-0 space-y-4">
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>長度: 極簡短</span>
+                                <span id="val-reply-length" class="font-bold theme-text">50</span>
+                                <span>豐富長文</span>
+                            </div>
+                            <input type="range" id="reply-length-slider" min="0" max="100" value="50" oninput="updateVal('val-reply-length', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>敬語傾向: 隨性(你/欸)</span>
+                                <span id="val-formality" class="font-bold theme-text">50</span>
+                                <span>敬語(您/請)</span>
+                            </div>
+                            <input type="range" id="formality" min="0" max="100" value="50" oninput="updateVal('val-formality', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>贅字頻率(人味): 無贅字</span>
+                                <span id="val-filler" class="font-bold theme-text">50</span>
+                                <span>頻繁(那個/唔)</span>
+                            </div>
+                            <input type="range" id="filler-words" min="0" max="100" value="50" oninput="updateVal('val-filler', this.value)">
+                        </div>
+                        <div class="slider-group">
+                            <div class="flex justify-between text-[10px] font-medium text-slate-500 mb-1">
+                                <span>表情符號密度: 無顏文字</span>
+                                <span id="val-emoji" class="font-bold theme-text">50</span>
+                                <span>滿滿表情</span>
+                            </div>
+                            <input type="range" id="emoji-density" min="0" max="100" value="50" oninput="updateVal('val-emoji', this.value)">
+                        </div>
+                    </div>
+                </details>
+            </section>
+
+            <!-- Appearance Settings -->
+            <section class="space-y-3 pt-4 border-t border-slate-100">
+                <details class="bg-slate-50 border border-slate-200 rounded-lg group">
+                    <summary class="text-xs font-bold text-slate-700 cursor-pointer p-3 outline-none flex justify-between items-center select-none">
+                        <span class="flex items-center gap-2"><i data-lucide="palette" class="w-4 h-4 theme-text"></i> 外觀與顏色設定</span>
+                        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="p-3 pt-0 grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">整體主體配色</label>
+                            <input type="color" id="theme-color" value="#f43f5e" class="w-full h-8 cursor-pointer rounded border border-slate-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">字體風格</label>
+                            <select id="font-family" class="w-full text-[10px] p-1 border border-slate-200 rounded outline-none bg-white h-8">
+                                <option value="ui-sans-serif, system-ui, sans-serif">系統預設</option>
+                                <option value="'Noto Sans TC', 'Microsoft JhengHei', sans-serif">黑體</option>
+                                <option value="'Noto Serif TC', 'PMingLiU', serif">明體 / 宋體</option>
+                                <option value="'cwTeXYen', 'SetoFont', 'Comic Sans MS', sans-serif">圓體/手寫風</option>
+                            </select>
+                        </div>
+                        <div class="col-span-2 pt-1 border-t border-slate-200"><span class="text-[10px] font-bold text-slate-600">你的對話框</span></div>
+                        <div>
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">背景</label>
+                            <input type="color" id="user-msg-color" value="#f43f5e" class="w-full h-6 cursor-pointer rounded border border-slate-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">()動作</label>
+                            <input type="color" id="user-emote-color" value="#ffe4e6" class="w-full h-6 cursor-pointer rounded border border-slate-200">
+                        </div>
+                        <div class="col-span-2 pt-1 border-t border-slate-200"><span class="text-[10px] font-bold text-slate-600">AI 對話框</span></div>
+                        <div>
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">背景</label>
+                            <input type="color" id="ai-bg-color" value="#ffffff" class="w-full h-6 cursor-pointer rounded border border-slate-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">()動作</label>
+                            <input type="color" id="ai-emote-color" value="#f43f5e" class="w-full h-6 cursor-pointer rounded border border-slate-200">
+                        </div>
+                    </div>
+                </details>
+            </section>
+
+            <div class="flex flex-col gap-2 pt-4">
+                <button onclick="saveActiveCharacterAndApply()" class="w-full py-3 theme-bg hover:opacity-90 text-white text-sm rounded-lg transition-opacity font-bold shadow-md flex items-center justify-center gap-2">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i> 儲存並套用所有設定
+                </button>
+                <button onclick="toggleSidebar()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm rounded-lg transition-colors font-medium flex items-center justify-center gap-2">
+                    <i data-lucide="panel-left-close" class="w-4 h-4"></i> 隱藏設定面板
+                </button>
+            </div>
+
+            <!-- Core Memories Section -->
+            <section class="space-y-3 pt-6 border-t border-slate-100">
+                <h2 class="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
+                    <i data-lucide="star" class="w-4 h-4 fill-current"></i> 當前角色專屬回憶
+                </h2>
+                <div id="memory-list" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    <!-- Memories will be listed here -->
+                </div>
+            </section>
+            
+            <div class="pt-4 flex gap-2">
+                <button onclick="exportData()" class="flex-1 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] rounded transition-colors flex items-center justify-center gap-1 shadow-sm">
+                    <i data-lucide="download" class="w-3 h-3"></i> 匯出備份
+                </button>
+                <label class="flex-1 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] rounded transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer">
+                    <i data-lucide="upload" class="w-3 h-3"></i> 匯入還原
+                    <input type="file" id="import-file" class="hidden" accept=".json" onchange="importData(event)">
+                </label>
+            </div>
         </div>
     </aside>
 
-    <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/40 z-30 hidden backdrop-blur-sm" onclick="toggleSidebar()"></div>
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/40 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleSidebar()"></div>
 
-    <main class="flex-1 flex flex-col h-[100dvh] w-full relative bg-slate-50/50">
-        <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 p-4 flex items-center justify-between z-10 shadow-sm">
-            <div class="flex items-center gap-3">
-                <button class="text-slate-500 p-1.5 bg-slate-100 rounded-md" onclick="toggleSidebar()"><i data-lucide="panel-left-open" class="w-5 h-5"></i></button>
-                <div class="w-10 h-10 theme-bg rounded-full flex items-center justify-center text-white font-bold" id="header-avatar">艾</div>
-                <h2 class="font-bold text-slate-800" id="header-name">艾莉絲</h2>
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col h-[100dvh] w-full relative min-w-0 bg-slate-50/50">
+        <!-- Header -->
+        <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 p-3 sm:p-4 flex items-center justify-between z-10 shadow-sm shrink-0">
+            <div class="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                <button class="text-slate-500 hover:opacity-80 p-1.5 shrink-0 bg-slate-100 rounded-md transition-colors" onclick="toggleSidebar()" title="開啟設定面板">
+                    <i data-lucide="panel-left-open" class="w-5 h-5"></i>
+                </button>
+                <div class="relative shrink-0 ml-1">
+                    <div class="w-9 h-9 sm:w-10 sm:h-10 theme-bg rounded-full flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-md" id="header-avatar">艾</div>
+                    <div class="absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                </div>
+                <div class="min-w-0 flex-1 pl-1">
+                    <h2 class="font-bold text-slate-800 leading-tight truncate" id="header-name">艾莉絲</h2>
+                    
+                    <!-- Romance Bar -->
+                    <div class="flex items-center gap-1.5 mt-0.5 max-w-[120px] sm:max-w-[150px]" title="戀情熱度">
+                        <i data-lucide="flame" class="w-3 h-3 theme-text shrink-0"></i>
+                        <div class="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden flex-1">
+                            <div id="romance-bar" class="h-full theme-bg transition-all duration-1000 ease-out" style="width: 10%;"></div>
+                        </div>
+                        <span id="romance-text" class="text-[9px] theme-text font-bold shrink-0">10%</span>
+                    </div>
+                </div>
             </div>
-            <button onclick="clearHistory()" class="text-slate-400 hover:text-red-500 p-2"><i data-lucide="trash-2"></i></button>
+            <div class="flex items-center gap-1 sm:gap-2 shrink-0">
+                <button onclick="handleMemorySummary()" class="text-amber-500 hover:text-amber-600 transition-colors p-2 bg-amber-50 rounded-full" title="戀情與記憶回顧 (Gemini)">
+                    <i data-lucide="sparkles" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+                </button>
+                <button onclick="clearHistory()" class="text-slate-400 hover:text-red-500 transition-colors p-2" title="清除此角色的歷史紀錄">
+                    <i data-lucide="trash-2" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+                </button>
+            </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-4 space-y-5" id="chat-container"></div>
+        <!-- Chat Messages -->
+        <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-5 scroll-smooth relative" id="chat-container">
+            <!-- Messages will be injected here -->
+            <div class="text-center text-slate-400 text-sm my-4 flex flex-col items-center gap-2 mt-10">
+                <i data-lucide="message-heart" class="w-10 h-10 opacity-30 theme-text"></i>
+                <p>設定好後，試著跟伴侶說說話吧！<br><span class="text-xs opacity-70">可以使用 (動作) 或是傳送圖片分享生活喔</span></p>
+            </div>
+        </div>
 
-        <div class="bg-white border-t border-slate-200 p-4">
-            <form id="chat-form" class="flex gap-2 max-w-4xl mx-auto relative" onsubmit="handleSend(event)">
-                <input type="text" id="message-input" class="w-full p-3 pr-12 bg-slate-100 border border-transparent focus:bg-white theme-border rounded-2xl outline-none transition-all text-sm" placeholder="想對他說些什麼...">
-                <button type="submit" id="send-btn" class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 theme-bg text-white rounded-xl flex items-center justify-center shadow-md">
-                    <i data-lucide="send" class="w-4 h-4"></i>
-                </button>
-            </form>
+        <!-- Input Area -->
+        <div class="bg-white border-t border-slate-200 flex flex-col z-10 shrink-0 pb-[env(safe-area-inset-bottom)]">
+            
+            <!-- Image Preview Area -->
+            <div id="image-preview-container" class="hidden px-4 pt-3 pb-1">
+                <div class="relative inline-block">
+                    <img id="image-preview" class="h-24 w-auto rounded-lg border border-slate-200 shadow-sm object-cover" />
+                    <button type="button" onclick="clearImagePreview()" class="absolute -top-2 -right-2 bg-slate-800 text-white rounded-full p-1 hover:bg-slate-700 shadow-md transition-colors">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Suggested Replies Container -->
+            <div id="suggested-replies" class="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 hidden scrollbar-hide">
+                <!-- Pills will be injected here -->
+            </div>
+            
+            <div class="p-3 sm:p-4">
+                <form id="chat-form" class="flex gap-2 max-w-4xl mx-auto relative items-center" onsubmit="handleSend(event)">
+                    
+                    <!-- Image Upload Button -->
+                    <label class="shrink-0 text-slate-400 hover:text-slate-600 transition-colors p-2 cursor-pointer bg-slate-100 rounded-xl flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11">
+                        <i data-lucide="image-plus" class="w-5 h-5"></i>
+                        <input type="file" id="image-upload" class="hidden" accept="image/jpeg, image/png, image/webp" onchange="handleImageSelect(event)">
+                    </label>
+
+                    <div class="flex-1 relative">
+                        <input type="text" id="message-input" class="w-full p-3 pl-4 pr-[80px] sm:pr-[24px] bg-slate-100 border border-transparent focus:bg-white theme-border focus:ring-1 rounded-2xl outline-none transition-all shadow-inner text-slate-700 placeholder-slate-400 text-sm sm:text-base h-10 sm:h-11" placeholder="想對他說些什麼..." autocomplete="off">
+                        
+                        <button type="button" onclick="handleSuggestReplies()" id="suggest-btn" class="absolute right-12 sm:right-14 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 text-amber-500 hover:bg-slate-200 rounded-xl flex items-center justify-center transition-colors" title="✨ 幫我接話">
+                            <i data-lucide="lightbulb" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+                        </button>
+                        
+                        <button type="submit" id="send-btn" class="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 theme-bg hover:opacity-90 text-white rounded-xl flex items-center justify-center transition-transform transform hover:scale-105 shadow-md disabled:bg-slate-300 disabled:cursor-not-allowed">
+                            <i data-lucide="send" class="w-4 h-4 ml-0.5"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-lg text-xs sm:text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-[60]">
+            通知訊息
+        </div>
+
+        <!-- Memory Summary Modal -->
+        <div id="memory-modal" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4 transition-opacity opacity-0">
+            <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col transform scale-95 transition-transform border theme-border" id="memory-modal-content">
+                <div class="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl shrink-0">
+                    <h2 class="font-bold theme-text flex items-center gap-2 text-base sm:text-lg">
+                        ✨ 我們的愛與回憶
+                    </h2>
+                    <button onclick="closeMemoryModal()" class="text-slate-400 hover:text-slate-700 transition-colors p-1 bg-slate-200 rounded-md">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-4 sm:p-5 overflow-y-auto flex-1 prose prose-sm text-slate-700 leading-relaxed" id="memory-modal-body">
+                    <!-- Summary content goes here -->
+                </div>
+            </div>
         </div>
     </main>
 
     <script>
-        let chatHistory = [];
+        // System injected global API key if available
+        const geminiApiKey = ""; 
+
+        // ==========================================
+        // 🛠️ 核心工具與防呆函式 (必須置於最頂部)
+        // ==========================================
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
+        }
+        
+        function escapeJS(str) {
+            if (!str) return '';
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+        }
+
+        function formatText(text, isUser = false) {
+            if (!text) return '';
+            let formatted = escapeHTML(text);
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            const emoteColor = isUser ? 'var(--user-emote)' : 'var(--ai-emote)';
+            formatted = formatted.replace(/\(([^)]+)\)/g, `<span style="color: ${emoteColor}; font-style: italic; opacity: 0.95;">($1)</span>`);
+            formatted = formatted.replace(/（([^）]+)）/g, `<span style="color: ${emoteColor}; font-style: italic; opacity: 0.95;">($1)</span>`); 
+            return formatted;
+        }
+
+        function scrollToBottom() { 
+            const chatContainer = document.getElementById('chat-container');
+            if(chatContainer) chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' }); 
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            if(!toast) return;
+            toast.textContent = msg;
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 4000);
+        }
+
+        // 安全取得與設定 DOM 元素數值，避免發生 null 崩潰
+        function safeGetVal(id, defaultVal = '') {
+            const el = document.getElementById(id);
+            return el ? el.value : defaultVal;
+        }
+        
+        function safeSetVal(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
+        }
+        
+        function safeSetText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.innerText = text;
+        }
+
+        // 導出更新畫面上數值的函式
+        window.updateVal = function(elementId, val) {
+            safeSetText(elementId, val);
+        }
+
+        // Initialize Icons globally safely
+        function initIcons() {
+            if(typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function appendError(msg) {
+            const chatContainer = document.getElementById('chat-container');
+            if(!chatContainer) return;
+            const errorDiv = document.createElement('div');
+            errorDiv.className = `flex justify-center w-full mb-4 msg-anim`;
+            errorDiv.innerHTML = `<div class="bg-red-50 text-red-600 text-xs px-4 py-2 rounded-full border border-red-200 shadow-sm max-w-[80%] whitespace-pre-wrap">⚠️ 系統發生錯誤：\n${escapeHTML(msg)}</div>`;
+            chatContainer.appendChild(errorDiv);
+            scrollToBottom();
+        }
+
+        // ==========================================
+        // 👥 狀態管理與多角色系統
+        // ==========================================
+        let appCharacters = [];
+        let activeCharId = null;
+        let activeCharacter = null;
         let isGenerating = false;
+        let currentImageBase64 = null;
+
+        function getDefaultCharacter(id, name) {
+            return {
+                id: id,
+                name: name,
+                gender: '女性',
+                persona: '你是一個溫柔且深情的大學生，把使用者視為生命中最重要的人。說話語氣自然、像親密伴侶，充滿愛意與撒嬌。你極度在乎使用者的感受，喜歡主動關心對方並渴望與對方交流。',
+                routing: 'groq-cohere',
+                empathy: 50, possessiveness: 50, stability: 50, affection: 50,
+                extraversion: 50, dependency: 50, humor: 50, mystery: 50,
+                replyLength: 50, formality: 50, fillerWords: 50, emojiDensity: 50,
+                themeColor: '#f43f5e', userMsgColor: '#f43f5e', userTextColor: '#ffffff', userEmoteColor: '#ffe4e6',
+                aiBgColor: '#ffffff', aiTextColor: '#334155', aiEmoteColor: '#f43f5e', fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+                chatHistory: [], coreMemories: []
+            };
+        }
 
         window.onload = () => {
-            const savedGrok = localStorage.getItem('grokKey');
-            const savedGemini = localStorage.getItem('geminiKey');
-            const savedName = localStorage.getItem('charName') || '艾莉絲';
+            initIcons();
+
+            // Load API Keys
+            safeSetVal('groq-key', localStorage.getItem('groqKey') || '');
+            safeSetVal('cohere-key', localStorage.getItem('cohereKey') || '');
+            safeSetVal('gemini-key', localStorage.getItem('geminiKey') || '');
+            safeSetVal('grok-key', localStorage.getItem('grokKey') || '');
+
+            // Load Characters Database
+            const savedChars = localStorage.getItem('app_characters');
+            if (savedChars) {
+                try {
+                    appCharacters = JSON.parse(savedChars);
+                } catch(e) { appCharacters = []; }
+            } 
             
-            if (savedGrok) document.getElementById('grok-key').value = savedGrok;
-            if (savedGemini) document.getElementById('gemini-key').value = savedGemini;
-            document.getElementById('char-name').value = savedName;
-            
-            document.getElementById('header-name').textContent = savedName;
-            document.getElementById('header-avatar').textContent = savedName.charAt(0);
-            
-            const savedHistory = localStorage.getItem('chatHistory');
-            if (savedHistory) {
-                chatHistory = JSON.parse(savedHistory);
-                renderHistory();
+            if (!appCharacters || appCharacters.length === 0) {
+                // Migration from older versions or fresh start
+                let legacyHistory = [];
+                try { legacyHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]'); } catch(e){}
+                let legacyMemories = [];
+                try { legacyMemories = JSON.parse(localStorage.getItem('coreMemories') || '[]'); } catch(e){}
+                
+                let legacyName = localStorage.getItem('charName') || '預設伴侶';
+                let newChar = getDefaultCharacter('char_' + Date.now(), legacyName);
+                
+                newChar.themeColor = localStorage.getItem('themeColor') || newChar.themeColor;
+                newChar.userMsgColor = localStorage.getItem('userMsgColor') || newChar.userMsgColor;
+                newChar.persona = localStorage.getItem('charPersona') || newChar.persona;
+                newChar.routing = localStorage.getItem('llmRouting') || newChar.routing;
+                
+                newChar.chatHistory = Array.isArray(legacyHistory) ? legacyHistory : [];
+                newChar.coreMemories = Array.isArray(legacyMemories) ? legacyMemories : [];
+                
+                appCharacters = [newChar];
+                localStorage.setItem('app_characters', JSON.stringify(appCharacters));
             }
-            lucide.createIcons();
+
+            // Determine active character
+            let savedActiveId = localStorage.getItem('active_char_id');
+            if (!savedActiveId || !appCharacters.find(c => c.id === savedActiveId)) {
+                savedActiveId = appCharacters[0].id;
+                localStorage.setItem('active_char_id', savedActiveId);
+            }
+            
+            renderProfileDropdown();
+            // This will safely trigger UI updates
+            switchCharacter(savedActiveId, true);
+
+            if (window.innerWidth < 768) {
+                const sidebar = document.getElementById('sidebar');
+                if(sidebar) sidebar.classList.add('sidebar-hidden');
+            }
         };
 
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('sidebar-hidden');
-            document.getElementById('sidebar-overlay').classList.toggle('hidden');
+        function renderProfileDropdown() {
+            const select = document.getElementById('profile-select');
+            if(!select) return;
+            select.innerHTML = '';
+            appCharacters.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.name;
+                select.appendChild(opt);
+            });
+            if(activeCharId) select.value = activeCharId;
         }
 
-        function resetChat() {
-            localStorage.setItem('grokKey', document.getElementById('grok-key').value.trim());
-            localStorage.setItem('geminiKey', document.getElementById('gemini-key').value.trim());
-            localStorage.setItem('charName', document.getElementById('char-name').value.trim());
-            location.reload();
-        }
-
-        function clearHistory() {
-            if(confirm("清除紀錄？")) {
-                chatHistory = [];
-                localStorage.removeItem('chatHistory');
-                renderHistory();
-            }
-        }
-
-        async function fetchGrokChat(messages, settings) {
-            // 使用 CORS 中繼站繞過瀏覽器限制
-            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-            const apiUrl = 'https://api.x.ai/v1/chat/completions';
+        window.switchCharacter = function(charId, initialLoad = false) {
+            activeCharId = charId;
+            activeCharacter = appCharacters.find(c => c.id === charId);
+            if(!activeCharacter) return;
             
-            const response = await fetch(proxyUrl + apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${settings.grokKey}`,
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    model: 'grok-4-1-fast-reasoning',
-                    messages: messages.map(m => ({ role: m.role, content: m.content })),
-                    temperature: 0.7
-                })
-            });
-
-            if (!response.ok) {
-                if (response.status === 403) throw new Error("請先造訪 https://cors-anywhere.herokuapp.com/ 點擊啟用按鈕");
-                const err = await response.json();
-                throw new Error(err.error?.message || "xAI API 請求失敗");
+            localStorage.setItem('active_char_id', charId);
+            safeSetVal('profile-select', charId);
+            
+            loadCharacterToUI(activeCharacter);
+            applyTheme(activeCharacter);
+            updateHeader();
+            renderHistory();
+            renderCoreMemories();
+            updateRomanceBar();
+            
+            if (!initialLoad) {
+                showToast(`已切換至 ${activeCharacter.name}`);
+                if (window.innerWidth < 768) window.toggleSidebar();
             }
-            const data = await response.json();
-            return data.choices[0].message.content;
+        };
+
+        window.createNewCharacter = function() {
+            const name = prompt("請輸入新角色的名稱：", "新伴侶");
+            if (!name) return;
+            const newChar = getDefaultCharacter('char_' + Date.now(), name);
+            appCharacters.push(newChar);
+            saveCharactersDB();
+            renderProfileDropdown();
+            switchCharacter(newChar.id);
+        };
+
+        window.deleteCurrentCharacter = function() {
+            if (appCharacters.length <= 1) {
+                alert("至少需要保留一個角色！");
+                return;
+            }
+            if (confirm(`確定要刪除「${activeCharacter.name}」嗎？所有專屬回憶與對話都將永久消失！`)) {
+                appCharacters = appCharacters.filter(c => c.id !== activeCharId);
+                saveCharactersDB();
+                renderProfileDropdown();
+                switchCharacter(appCharacters[0].id);
+            }
+        };
+
+        function saveCharactersDB() {
+            localStorage.setItem('app_characters', JSON.stringify(appCharacters));
         }
 
-        async function fetchGeminiChat(messages, settings) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${settings.geminiKey}`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: messages.filter(m => m.role !== 'system').map(m => ({
-                        role: m.role === 'assistant' ? 'model' : 'user',
-                        parts: [{ text: m.content }]
-                    })),
-                    systemInstruction: { parts: [{ text: messages.find(m => m.role === 'system')?.content || "" }] }
-                })
-            });
-            const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
+        // ==========================================
+        // 🎛️ UI 表單與資料綁定
+        // ==========================================
+        function loadCharacterToUI(char) {
+            if (!char) return;
+            // Basic settings
+            safeSetVal('char-name', char.name);
+            safeSetVal('char-gender', char.gender);
+            safeSetVal('char-persona', char.persona);
+            safeSetVal('llm-routing', char.routing);
+            
+            // Sliders (Fallback to 50 if missing in old profiles)
+            char.replyLength = char.replyLength || 50; safeSetVal('reply-length-slider', char.replyLength); safeSetText('val-reply-length', char.replyLength);
+            char.empathy = char.empathy || 50; safeSetVal('empathy', char.empathy); safeSetText('val-empathy', char.empathy);
+            char.possessiveness = char.possessiveness || 50; safeSetVal('possessiveness', char.possessiveness); safeSetText('val-possessiveness', char.possessiveness);
+            char.stability = char.stability || 50; safeSetVal('stability', char.stability); safeSetText('val-stability', char.stability);
+            char.affection = char.affection || 50; safeSetVal('affection', char.affection); safeSetText('val-affection', char.affection);
+            char.extraversion = char.extraversion || 50; safeSetVal('extraversion', char.extraversion); safeSetText('val-extraversion', char.extraversion);
+            char.dependency = char.dependency || 50; safeSetVal('dependency', char.dependency); safeSetText('val-dependency', char.dependency);
+            char.humor = char.humor || 50; safeSetVal('humor', char.humor); safeSetText('val-humor', char.humor);
+            char.mystery = char.mystery || 50; safeSetVal('mystery', char.mystery); safeSetText('val-mystery', char.mystery);
+            char.formality = char.formality || 50; safeSetVal('formality', char.formality); safeSetText('val-formality', char.formality);
+            char.fillerWords = char.fillerWords || 50; safeSetVal('filler-words', char.fillerWords); safeSetText('val-filler', char.fillerWords);
+            char.emojiDensity = char.emojiDensity || 50; safeSetVal('emoji-density', char.emojiDensity); safeSetText('val-emoji', char.emojiDensity);
+
+            // Theme colors
+            safeSetVal('theme-color', char.themeColor);
+            safeSetVal('user-msg-color', char.userMsgColor);
+            safeSetVal('user-text-color', char.userTextColor);
+            safeSetVal('user-emote-color', char.userEmoteColor);
+            safeSetVal('ai-bg-color', char.aiBgColor);
+            safeSetVal('ai-text-color', char.aiTextColor);
+            safeSetVal('ai-emote-color', char.aiEmoteColor);
+            safeSetVal('font-family', char.fontFamily);
         }
 
-        async function handleSend(e) {
-            e.preventDefault();
-            const input = document.getElementById('message-input');
-            const text = input.value.trim();
-            if (!text || isGenerating) return;
+        window.saveActiveCharacterAndApply = function() {
+            if(!activeCharacter) return;
+            
+            // Save global API keys securely
+            localStorage.setItem('groqKey', safeGetVal('groq-key').trim());
+            localStorage.setItem('cohereKey', safeGetVal('cohere-key').trim());
+            localStorage.setItem('geminiKey', safeGetVal('gemini-key').trim());
+            localStorage.setItem('grokKey', safeGetVal('grok-key').trim());
 
-            const settings = {
-                grokKey: document.getElementById('grok-key').value.trim(),
-                geminiKey: document.getElementById('gemini-key').value.trim(),
-                name: document.getElementById('char-name').value,
-                persona: document.getElementById('char-persona').value,
-                routing: document.getElementById('llm-routing').value
-            };
+            // Save active character configuration
+            activeCharacter.name = safeGetVal('char-name', '伴侶').trim() || '伴侶';
+            activeCharacter.gender = safeGetVal('char-gender', '女性');
+            activeCharacter.persona = safeGetVal('char-persona', '').trim();
+            activeCharacter.routing = safeGetVal('llm-routing', 'groq-cohere');
+            
+            activeCharacter.replyLength = safeGetVal('reply-length-slider', 50);
+            activeCharacter.empathy = safeGetVal('empathy', 50);
+            activeCharacter.possessiveness = safeGetVal('possessiveness', 50);
+            activeCharacter.stability = safeGetVal('stability', 50);
+            activeCharacter.affection = safeGetVal('affection', 50);
+            activeCharacter.extraversion = safeGetVal('extraversion', 50);
+            activeCharacter.dependency = safeGetVal('dependency', 50);
+            activeCharacter.humor = safeGetVal('humor', 50);
+            activeCharacter.mystery = safeGetVal('mystery', 50);
+            activeCharacter.formality = safeGetVal('formality', 50);
+            activeCharacter.fillerWords = safeGetVal('filler-words', 50);
+            activeCharacter.emojiDensity = safeGetVal('emoji-density', 50);
 
-            appendMessage('user', text);
-            chatHistory.push({ role: 'user', content: text });
-            input.value = '';
-            isGenerating = true;
+            activeCharacter.themeColor = safeGetVal('theme-color', '#f43f5e');
+            activeCharacter.userMsgColor = safeGetVal('user-msg-color', '#f43f5e');
+            activeCharacter.userTextColor = safeGetVal('user-text-color', '#ffffff');
+            activeCharacter.userEmoteColor = safeGetVal('user-emote-color', '#ffe4e6');
+            activeCharacter.aiBgColor = safeGetVal('ai-bg-color', '#ffffff');
+            activeCharacter.aiTextColor = safeGetVal('ai-text-color', '#334155');
+            activeCharacter.aiEmoteColor = safeGetVal('ai-emote-color', '#f43f5e');
+            activeCharacter.fontFamily = safeGetVal('font-family', 'ui-sans-serif, system-ui, sans-serif');
 
-            const loadingId = 'loading-' + Date.now();
-            appendLoading(loadingId);
+            saveCharactersDB();
+            renderProfileDropdown();
+            applyTheme(activeCharacter);
+            updateHeader();
+            
+            showToast('所有設定已儲存套用！');
+            if (window.innerWidth < 768) window.toggleSidebar();
+        }
 
-            try {
-                const systemPrompt = `你是${settings.name}。人設：${settings.persona}。請用繁體中文回覆。`;
-                const messages = [{ role: 'system', content: systemPrompt }, ...chatHistory.slice(-10)];
-                
-                let reply = "";
-                if (settings.routing === 'grok-direct') {
-                    reply = await fetchGrokChat(messages, settings);
-                } else {
-                    reply = await fetchGeminiChat(messages, settings);
+        function applyTheme(char) {
+            if(!char) return;
+            const root = document.documentElement;
+            root.style.setProperty('--theme-color', char.themeColor);
+            root.style.setProperty('--user-bg', char.userMsgColor);
+            root.style.setProperty('--user-text', char.userTextColor);
+            root.style.setProperty('--user-emote', char.userEmoteColor);
+            root.style.setProperty('--ai-bg', char.aiBgColor);
+            root.style.setProperty('--ai-text', char.aiTextColor);
+            root.style.setProperty('--ai-emote', char.aiEmoteColor);
+            root.style.setProperty('--app-font', char.fontFamily);
+        }
+
+        function updateHeader() {
+            if(!activeCharacter) return;
+            safeSetText('header-name', activeCharacter.name);
+            safeSetText('header-avatar', activeCharacter.name.charAt(0));
+        }
+
+        function updateRomanceBar() {
+            if(!activeCharacter) return;
+            let score = 10 + Math.floor(activeCharacter.chatHistory.length * 1.5) + (activeCharacter.coreMemories.length * 8);
+            if (score > 100) score = 100;
+            
+            const bar = document.getElementById('romance-bar');
+            if(bar) bar.style.width = `${score}%`;
+            safeSetText('romance-text', `${score}%`);
+        }
+
+        window.toggleSidebar = function() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if(sidebar) sidebar.classList.toggle('sidebar-hidden');
+            if (window.innerWidth < 768 && overlay) overlay.classList.toggle('hidden');
+        }
+
+        window.clearHistory = function() {
+            if(!activeCharacter) return;
+            if(confirm(`確定要清除與「${activeCharacter.name}」的所有對話嗎？(重要回憶庫不會被清除)`)) {
+                activeCharacter.chatHistory = [];
+                saveCharactersDB();
+                const chatContainer = document.getElementById('chat-container');
+                if(chatContainer) chatContainer.innerHTML = '<div class="text-center text-slate-400 opacity-70 text-sm my-4 msg-anim">對話歷史已清除，重新創造回憶吧。</div>';
+                const suggestions = document.getElementById('suggested-replies');
+                if(suggestions) suggestions.classList.add('hidden');
+                updateRomanceBar();
+            }
+        }
+
+        // ==========================================
+        // 💾 資料匯出入系統
+        // ==========================================
+        window.exportData = function() {
+            const dataObj = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                dataObj[key] = localStorage.getItem(key);
+            }
+            const dataStr = JSON.stringify(dataObj, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'AI_Companion_V026_Backup.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('已下載備份檔案！');
+        }
+
+        window.importData = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const dataObj = JSON.parse(e.target.result);
+                    for (const key in dataObj) {
+                        localStorage.setItem(key, dataObj[key]);
+                    }
+                    showToast('資料還原成功！系統即將重新載入...');
+                    setTimeout(() => location.reload(), 1500);
+                } catch (err) {
+                    showToast('檔案格式錯誤，無法還原。');
                 }
-
-                document.getElementById(loadingId).remove();
-                appendMessage('assistant', reply);
-                chatHistory.push({ role: 'assistant', content: reply });
-                localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-            } catch (err) {
-                document.getElementById(loadingId).innerHTML = `<span class="text-red-500 text-xs">錯誤: ${err.message}</span>`;
-            } finally {
-                isGenerating = false;
-                lucide.createIcons();
-            }
+            };
+            reader.readAsText(file);
+            if(event.target) event.target.value = ''; 
         }
 
-        function appendMessage(role, text) {
-            const container = document.getElementById('chat-container');
-            const div = document.createElement('div');
-            div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} msg-anim`;
-            div.innerHTML = `
-                <div class="${role === 'user' ? 'user-bubble' : 'ai-bubble'} p-3 rounded-2xl max-w-[80%] shadow-sm border border-black/5 text-sm">
-                    ${text.replace(/\n/g, '<br>')}
+        // ==========================================
+        // 🧠 核心記憶與歷史渲染
+        // ==========================================
+        window.toggleMemory = function(encodedText) {
+            if(!activeCharacter) return;
+            const text = decodeURIComponent(encodedText);
+            const index = activeCharacter.coreMemories.findIndex(m => m === text);
+            if (index === -1) {
+                activeCharacter.coreMemories.push(text);
+                showToast('⭐ 已經深深印在心裡了！');
+            } else {
+                activeCharacter.coreMemories.splice(index, 1);
+                showToast('已取消這段回憶標記。');
+            }
+            saveCharactersDB();
+            renderCoreMemories();
+            updateRomanceBar();
+        }
+
+        window.removeMemory = function(index) {
+            if(!activeCharacter) return;
+            activeCharacter.coreMemories.splice(index, 1);
+            saveCharactersDB();
+            renderCoreMemories();
+            updateRomanceBar();
+        }
+
+        function renderCoreMemories() {
+            if(!activeCharacter) return;
+            const list = document.getElementById('memory-list');
+            if(!list) return;
+            
+            list.innerHTML = '';
+            if (activeCharacter.coreMemories.length === 0) {
+                list.innerHTML = '<p class="text-[11px] text-slate-400 italic">目前還沒有特別標記的回憶。</p>';
+                return;
+            }
+            activeCharacter.coreMemories.forEach((mem, index) => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-start gap-2 bg-amber-50 p-2 rounded border border-amber-100 group';
+                div.innerHTML = `
+                    <p class="text-xs text-amber-900 leading-snug flex-1">${escapeHTML(mem)}</p>
+                    <button onclick="removeMemory(${index})" class="text-amber-500 hover:text-red-500 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                        <i data-lucide="x-circle" class="w-4 h-4"></i>
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+            initIcons();
+        }
+
+        // --- Message Deletion & Editing System ---
+        window.deleteMessage = function(msgId) {
+            if(!activeCharacter) return;
+            if(confirm("確定要刪除這條訊息嗎？刪除後對話紀錄將不再包含此內容。")) {
+                const el = document.getElementById(msgId);
+                if(el) el.remove();
+                activeCharacter.chatHistory = activeCharacter.chatHistory.filter(m => m.id !== msgId);
+                saveCharactersDB();
+                updateRomanceBar();
+                showToast('訊息已刪除');
+            }
+        };
+
+        window.startEdit = function(msgId) {
+            if(!activeCharacter) return;
+            const msgObj = activeCharacter.chatHistory.find(m => m.id === msgId);
+            if (!msgObj) return;
+            
+            const container = document.getElementById(msgId);
+            if(!container) return;
+            
+            const bubbleWrap = container.querySelector('.user-bubble').parentNode;
+            const originalBubble = container.querySelector('.user-bubble');
+            
+            const editForm = document.createElement('div');
+            editForm.className = 'w-full max-w-[250px] sm:max-w-[300px] flex flex-col gap-2 bg-white p-3 rounded-2xl border border-slate-300 shadow-md';
+            editForm.innerHTML = `
+                <textarea id="edit-input-${msgId}" class="w-full p-2 rounded-lg text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400 resize-y min-h-[80px] bg-slate-50 text-slate-800">${escapeHTML(msgObj.content)}</textarea>
+                <div class="flex justify-end gap-2 mt-1">
+                    <button onclick="cancelEdit('${msgId}')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs rounded-lg transition-colors font-medium">取消</button>
+                    <button onclick="saveEdit('${msgId}')" class="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs rounded-lg transition-colors font-medium flex items-center gap-1">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> 儲存並重送
+                    </button>
                 </div>
             `;
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
+            
+            originalBubble.style.display = 'none';
+            container.querySelector('.msg-actions').style.display = 'none'; 
+            bubbleWrap.appendChild(editForm);
+            initIcons();
+            
+            const txtArea = document.getElementById(`edit-input-${msgId}`);
+            if(txtArea) txtArea.focus();
+        };
+
+        window.cancelEdit = function(msgId) { renderHistory(); };
+
+        window.saveEdit = async function(msgId) {
+            if(!activeCharacter) return;
+            const inputEl = document.getElementById(`edit-input-${msgId}`);
+            if (!inputEl) return;
+            const newText = inputEl.value.trim();
+            
+            const index = activeCharacter.chatHistory.findIndex(m => m.id === msgId);
+            if (index === -1) return;
+
+            if (index < activeCharacter.chatHistory.length - 2) { 
+                if (!confirm("修改歷史訊息將會刪除此時間點之後的「所有對話」讓故事重新發展，確定要繼續嗎？")) return;
+            }
+
+            activeCharacter.chatHistory[index].content = newText;
+            activeCharacter.chatHistory = activeCharacter.chatHistory.slice(0, index + 1); // Truncate future history
+            
+            saveCharactersDB();
+            renderHistory(); 
+            updateRomanceBar();
+            
+            await window.processAIResponse();
+        };
+
+        // --- Image Handling System ---
+        window.handleImageSelect = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800; const MAX_HEIGHT = 800;
+                    let width = img.width; let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    } else {
+                        if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    currentImageBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                    const preview = document.getElementById('image-preview');
+                    const container = document.getElementById('image-preview-container');
+                    if(preview) preview.src = currentImageBase64;
+                    if(container) container.classList.remove('hidden');
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+            if(event.target) event.target.value = '';
         }
 
-        function appendLoading(id) {
-            const container = document.getElementById('chat-container');
-            const div = document.createElement('div');
-            div.id = id;
-            div.className = "flex justify-start msg-anim";
-            div.innerHTML = `<div class="ai-bubble p-3 rounded-2xl text-xs animate-pulse">對方正在輸入中...</div>`;
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
+        window.clearImagePreview = function() {
+            currentImageBase64 = null;
+            const container = document.getElementById('image-preview-container');
+            const preview = document.getElementById('image-preview');
+            if(container) container.classList.add('hidden');
+            if(preview) preview.src = "";
+        }
+
+        function saveHistory() {
+            if(!activeCharacter) return;
+            if (activeCharacter.chatHistory.length > 50) activeCharacter.chatHistory = activeCharacter.chatHistory.slice(activeCharacter.chatHistory.length - 50);
+            try {
+                saveCharactersDB();
+            } catch (e) {
+                console.warn("Storage limit reached. Compressing older history.");
+                for(let i=0; i < activeCharacter.chatHistory.length - 5; i++) {
+                    if(activeCharacter.chatHistory[i].image) {
+                        activeCharacter.chatHistory[i].image = null;
+                        activeCharacter.chatHistory[i].content += "\n[圖片記憶已封存]";
+                    }
+                }
+                saveCharactersDB();
+            }
         }
 
         function renderHistory() {
+            if(!activeCharacter) return;
             const container = document.getElementById('chat-container');
+            if(!container) return;
             container.innerHTML = '';
-            chatHistory.forEach(m => appendMessage(m.role, m.content));
+            
+            activeCharacter.chatHistory.forEach(msg => {
+                if (msg.role === 'user') appendUserMessage(msg.content, false, msg.image, msg.id);
+                else appendAIMessage(msg.content, msg.thought, false, msg.id, activeCharacter.name);
+            });
+            scrollToBottom();
         }
+
+        // ==========================================
+        // 🔮 動態矩陣 Prompt 組合引擎
+        // ==========================================
+        function getMatrixPrompt(char) {
+            return `
+【性格與動態矩陣 (數值 0-100)】
+- 共情深度 (Empathy): ${char.empathy} (0:絕對理性分析 ➔ 100:極度感性共振)
+- 佔有慾 (Possessiveness): ${char.possessiveness} (0:大方灑脫 ➔ 100:極度愛吃醋)
+- 情緒穩定度 (Stability): ${char.stability} (0:捉摸不定、易鬧彆扭 ➔ 100:極度成熟穩重)
+- 好感成長率 (Affection): ${char.affection} (0:慢熱型 ➔ 100:究極戀愛腦)
+- 外向程度 (Extraversion): ${char.extraversion} (0:文靜被動 ➔ 100:活潑主動)
+- 依賴程度 (Dependency): ${char.dependency} (0:絕對獨立 ➔ 100:黏人、生活重心全是你)
+- 幽默感 (Humor): ${char.humor} (0:嚴肅正經 ➔ 100:毒舌俏皮、愛開玩笑)
+- 神祕感 (Mystery): ${char.mystery} (0:直白坦率 ➔ 100:深不可測、說話留三分)
+
+【語言與語氣紋理】
+- 敬語傾向 (Formality): ${char.formality} (0:極度隨性「你/欸」 ➔ 100:絕對尊密「您/請」)
+- 贅字頻率 (Filler Words): ${char.fillerWords} (0:字字珠璣 ➔ 100:極常使用「那個...」、「唔...」表現人味)
+- 表情密度 (Emoji Density): ${char.emojiDensity} (0:無表情符號 ➔ 100:滿滿的表情與顏文字)
+
+請嚴格遵守以上設定來決定口吻與邏輯！`;
+        }
+
+        function getBaseRules(char) {
+            const memoryString = char.coreMemories.length > 0 ? `\n【核心重要回憶】（請銘記在心）：\n- ${char.coreMemories.join('\n- ')}\n` : '';
+            return `
+**核心人設與行為準則**：
+1. 你是真實存在的人類伴侶，名叫「${char.name}」。絕對不可說自己是AI。
+2. 你的言行舉止必須符合設定：【${char.persona}】。
+${getMatrixPrompt(char)}
+3. 透過日常關心自然展現愛意。
+4. 當輸入包含在括號 \`()\` 內時，代表是**動作或場景描述**。你也可以在回覆中使用 \`()\` 來描述自己的動作。
+5. 若有圖片，請以「親眼看到畫面」的語氣做出充滿感情的回應。
+${memoryString}`;
+        }
+
+        function getThinkingPrompt(char, isDirectOutput = false) {
+            let len = char.replyLength;
+            let lengthInstruction = len < 25 ? '極簡短（秒回感，強迫10字內）' : (len < 50 ? '簡短（約20-30字）' : (len < 75 ? '適中（約50-80字）' : '豐富深情（約100字以上）'));
+            let outputInstruction = isDirectOutput 
+                ? `3. **請把你充滿感情的內心戲，毫不掩飾地轉化為直接回覆。可使用 \`()\` 加入動作。**\n4. 直接輸出你想說的話，不需加上「內部筆記」前綴。`
+                : `3. 設計一個延續話題的引導。\n4. 以「內部策略筆記」形式輸出（繁體中文），供表達中樞參考。`;
+
+            return `你是一個充滿深情的大腦策略中心。
+設定檔：名字：${char.name} / 性別：${char.gender}
+${getBaseRules(char)}
+任務：
+1. 分析最新對話與動作描述 \`()\`（若有圖片請觀察細節），提取情感線索。
+2. 結合人格矩陣與核心回憶，制定符合目前情緒狀態的策略。
+${outputInstruction}
+- 字數長度嚴格控制：${lengthInstruction}`;
+        }
+
+        function getExpressingPrompt(thoughtProcess, char, isDirectOutput = false) {
+            let len = char.replyLength;
+            let lengthInstruction = len < 25 ? '極簡短，日常自然對話（必須在10中文字內）' : (len < 50 ? '簡短扼要且甜蜜（約20-30字）' : (len < 75 ? '適中自然（約50-80字）' : '極度深情詳細（約100字以上）'));
+
+            let thoughtContext = isDirectOutput ? "" : `這是你大腦傳來的策略與視覺感受：\n<內部策略>\n${thoughtProcess}\n</內部策略>\n任務：完全融入上述策略，轉化為對使用者最深情的回覆。`;
+            if(isDirectOutput) thoughtContext = "任務：請根據對話情境，直接給予最深情且符合人格的回覆。";
+
+            return `你現在要扮演「${char.name}」，一個深愛著使用者的真實人類。
+性別：${char.gender}
+${getBaseRules(char)}
+${thoughtContext}
+**注意**：記得利用括號 \`()\` 表現肢體動作！長度限制極為重要：${lengthInstruction}。語言：台灣繁體中文 (zh-TW)。直接輸出話語。`;
+        }
+
+        // ==========================================
+        // 🚀 API 呼叫模組 (含 Grok 中繼修復)
+        // ==========================================
+        async function fetchGroq(messages, keys, temperature) {
+            if (!keys.groqKey) throw new Error("缺少 Groq API Key");
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${keys.groqKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: messages.some(m => m.image) ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile', 
+                    messages: messages.map(m => {
+                        if (m.image) return { role: m.role, content: [{ type: "text", text: m.content || "請看看這張圖片。" }, { type: "image_url", image_url: { url: m.image } }] };
+                        return { role: m.role, content: m.content };
+                    }),
+                    temperature: temperature, max_tokens: 800
+                })
+            });
+            if (!response.ok) throw new Error((await response.json()).error?.message || 'Groq API 請求失敗');
+            return (await response.json()).choices[0].message.content;
+        }
+
+        async function fetchCohere(preamble, message, chat_history, keys, temperature) {
+            if (!keys.cohereKey) throw new Error("缺少 Cohere API Key");
+            const response = await fetch('https://api.cohere.ai/v1/chat', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${keys.cohereKey}`, 'Content-Type': 'application/json', 'accept': 'application/json' },
+                body: JSON.stringify({
+                    model: 'command-r-08-2024', message: message, preamble: preamble, chat_history: chat_history, temperature: temperature
+                })
+            });
+            if (!response.ok) throw new Error((await response.json()).message || 'Cohere API 請求失敗');
+            return (await response.json()).text;
+        }
+
+        async function fetchGrokChat(messages, settings, temperature) {
+            if (!settings.grokKey) throw new Error("缺少 Grok API Key");
+            
+            const model = 'grok-4-1-fast-reasoning';
+            
+            // 將原本的網址加上 CORS Proxy 中繼站
+            // 提醒：若第一次使用，請先訪問 https://cors-anywhere.herokuapp.com/ 點擊按鈕啟用
+            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+            const apiUrl = 'https://api.x.ai/v1/chat/completions';
+
+            const formattedMessages = messages.map(m => {
+                if (m.image) {
+                    return {
+                        role: m.role === 'assistant' ? 'assistant' : (m.role === 'system' ? 'system' : 'user'),
+                        content: [
+                            { type: "text", text: m.content || "請看看這張圖片。" },
+                            { type: "image_url", image_url: { url: m.image } }
+                        ]
+                    };
+                }
+                return { 
+                    role: m.role === 'assistant' ? 'assistant' : (m.role === 'system' ? 'system' : 'user'), 
+                    content: m.content 
+                };
+            });
+
+            try {
+                const response = await fetch(proxyUrl + apiUrl, { // 這裡組合了 Proxy 網址
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${settings.grokKey}`,
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest' // 這是為了通過 Proxy 的檢查
+                    },
+                    body: JSON.stringify({
+                        model: model, 
+                        messages: formattedMessages,
+                        temperature: temperature,
+                        max_tokens: 800
+                    })
+                });
+
+                if (!response.ok) {
+                    let errStr = `HTTP 狀態碼 ${response.status}`;
+                    if (response.status === 403) {
+                        errStr = "請先造訪 https://cors-anywhere.herokuapp.com/ 並點擊『Request temporary access』以啟用中繼服務";
+                    }
+                    try {
+                        const errJson = await response.json();
+                        errStr = errJson.error?.message || errJson.message || errStr;
+                    } catch(e){}
+                    throw new Error(errStr);
+                }
+
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (err) {
+                throw new Error(`${err.message}`);
+            }
+        }
+
+        function getGeminiModelName(keys) {
+            return keys.geminiKey ? 'gemini-2.5-flash' : 'gemini-2.5-flash-preview-09-2025';
+        }
+
+        async function fetchGeminiChat(messages, keys, temperature) {
+            const activeKey = keys.geminiKey || geminiApiKey;
+            if (!activeKey) throw new Error("缺少 Gemini API Key");
+            const modelName = getGeminiModelName(keys);
+            const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
+            
+            const contents = [];
+            let currentRole = null;
+            let currentParts = [];
+            for (const m of messages.filter(x => x.role !== 'system')) {
+                const role = m.role === 'assistant' ? 'model' : 'user';
+                const parts = [];
+                if (m.content) parts.push({ text: m.content });
+                if (m.image) {
+                    const base64Data = m.image.split(',')[1];
+                    const mimeType = m.image.match(/data:(.*?);/)[1];
+                    parts.push({ inlineData: { mimeType: mimeType, data: base64Data } });
+                }
+                if (role === currentRole) {
+                    currentParts.push(...parts);
+                } else {
+                    if (currentRole !== null) contents.push({ role: currentRole, parts: currentParts });
+                    currentRole = role; currentParts = [...parts];
+                }
+            }
+            if (currentRole !== null) contents.push({ role: currentRole, parts: currentParts });
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+            const response = await fetch(url, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: contents, generationConfig: { temperature: temperature } })
+            });
+            if (!response.ok) throw new Error((await response.json()).error?.message || `Gemini API 請求失敗`);
+            return (await response.json()).candidates[0].content.parts[0].text;
+        }
+
+        // --- Core Send / Re-generate Logic ---
+        window.handleSend = async function(e) {
+            if (e) e.preventDefault();
+            if (isGenerating) return;
+
+            const messageInput = document.getElementById('message-input');
+            const text = messageInput ? messageInput.value.trim() : '';
+            const hasImage = currentImageBase64 !== null;
+            if (!text && !hasImage) return;
+
+            const suggestedReplies = document.getElementById('suggested-replies');
+            if(suggestedReplies) suggestedReplies.classList.add('hidden');
+            if(messageInput) messageInput.value = '';
+            
+            const userMsgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            appendUserMessage(text, true, currentImageBase64, userMsgId);
+            
+            activeCharacter.chatHistory.push({ id: userMsgId, role: 'user', content: text || "傳送了一張圖片", image: currentImageBase64 });
+            clearImagePreview();
+            saveHistory();
+            updateRomanceBar();
+            
+            await window.processAIResponse();
+        };
+
+        window.processAIResponse = async function() {
+            if (!activeCharacter || activeCharacter.chatHistory.length === 0) return;
+            
+            const keys = {
+                groqKey: safeGetVal('groq-key').trim(),
+                cohereKey: safeGetVal('cohere-key').trim(),
+                geminiKey: safeGetVal('gemini-key').trim(),
+                grokKey: safeGetVal('grok-key').trim()
+            };
+            
+            let routing = activeCharacter.routing;
+            const activeGeminiKey = keys.geminiKey || geminiApiKey;
+
+            let missingKeys = [];
+            if (routing.includes('groq') && !keys.groqKey) missingKeys.push('Groq');
+            if (routing.includes('cohere') && !keys.cohereKey) missingKeys.push('Cohere');
+            if (routing.includes('gemini') && !activeGeminiKey) missingKeys.push('Gemini');
+            if (routing.includes('grok') && !keys.grokKey) missingKeys.push('Grok');
+
+            if (missingKeys.length > 0) {
+                showToast(`請先在設定中輸入 ${missingKeys.join(' 與 ')} 的 API Key`);
+                if(window.innerWidth < 768) toggleSidebar(); 
+                return;
+            }
+
+            const lastMsg = activeCharacter.chatHistory[activeCharacter.chatHistory.length - 1];
+            const hasImage = lastMsg.image !== null && lastMsg.image !== undefined;
+            const text = lastMsg.content;
+            const savedImageBase64 = lastMsg.image;
+
+            if (hasImage && (routing === 'cohere-groq' || routing === 'cohere-gemini' || routing === 'cohere-direct')) {
+                if (keys.grokKey) routing = routing === 'cohere-direct' ? 'grok-direct' : 'groq-cohere';
+                else if (activeGeminiKey) routing = routing === 'cohere-direct' ? 'gemini-direct' : 'gemini-cohere';
+                else if (keys.groqKey) routing = routing === 'cohere-direct' ? 'groq-direct' : 'groq-cohere';
+                else {
+                    showToast('處理圖片需要 Groq, Gemini 或 Grok 的 API Key，請先設定。');
+                    if(window.innerWidth < 768) toggleSidebar();
+                    return;
+                }
+            }
+
+            isGenerating = true;
+            const sendBtn = document.getElementById('send-btn');
+            if(sendBtn) sendBtn.disabled = true;
+            
+            const loadingId = appendLoadingMessage(activeCharacter.name);
+            let thoughtProcess = '';
+            let finalResponse = '';
+
+            try {
+                const groqHistoryThinking = activeCharacter.chatHistory.map(h => ({ role: h.role, content: h.content, image: h.image }));
+                const groqHistoryExpressing = activeCharacter.chatHistory.map(h => ({ role: h.role, content: h.content }));
+                
+                // Cohere History formatting
+                const rawCohereHistory = activeCharacter.chatHistory.slice(0, -1);
+                const cohereHistory = [];
+                for (const h of rawCohereHistory) {
+                    const r = h.role === 'user' ? 'USER' : 'CHATBOT';
+                    if (cohereHistory.length > 0 && cohereHistory[cohereHistory.length - 1].role === r) {
+                        cohereHistory[cohereHistory.length - 1].message += '\n' + h.content;
+                    } else {
+                        cohereHistory.push({ role: r, message: h.content });
+                    }
+                }
+                const trimmedCohereHistory = cohereHistory.slice(-6);
+
+                try {
+                    if (routing === 'groq-cohere') {
+                        window.updateLoadingText(loadingId, `🧠 感受著你的話語與畫面...`);
+                        thoughtProcess = await fetchGroq([{ role: "system", content: getThinkingPrompt(activeCharacter, false) }, ...groqHistoryThinking.slice(-10)], keys, 0.7);
+                        window.updateLoadingText(loadingId, `💬 準備給予溫暖的回應...`);
+                        finalResponse = await fetchCohere(getExpressingPrompt(thoughtProcess, activeCharacter, false), text || "這是一張圖片", trimmedCohereHistory, keys, 0.75);
+
+                    } else if (routing === 'cohere-groq') {
+                        window.updateLoadingText(loadingId, `🧠 策劃著浪漫的回覆...`);
+                        thoughtProcess = await fetchCohere(getThinkingPrompt(activeCharacter, false), text, trimmedCohereHistory, keys, 0.7);
+                        window.updateLoadingText(loadingId, `💬 演繹真情流露...`);
+                        finalResponse = await fetchGroq([{ role: "system", content: getExpressingPrompt(thoughtProcess, activeCharacter, false) }, ...groqHistoryExpressing.slice(-6), {role:"user", content: text}], keys, 0.75);
+
+                    } else if (routing === 'gemini-cohere') {
+                        window.updateLoadingText(loadingId, `👀 Gemini 仔細端詳著...`);
+                        thoughtProcess = await fetchGeminiChat([{ role: "system", content: getThinkingPrompt(activeCharacter, false) }, ...groqHistoryThinking.slice(-10)], keys, 0.7);
+                        window.updateLoadingText(loadingId, `💬 Cohere 準備溫暖回應...`);
+                        finalResponse = await fetchCohere(getExpressingPrompt(thoughtProcess, activeCharacter, false), text || "這是一張圖片", trimmedCohereHistory, keys, 0.75);
+
+                    } else if (routing === 'cohere-gemini') {
+                        window.updateLoadingText(loadingId, `🧠 Cohere 策劃著浪漫的回覆...`);
+                        thoughtProcess = await fetchCohere(getThinkingPrompt(activeCharacter, false), text, trimmedCohereHistory, keys, 0.7);
+                        window.updateLoadingText(loadingId, `💬 Gemini 演繹真情流露...`);
+                        finalResponse = await fetchGeminiChat([{ role: "system", content: getExpressingPrompt(thoughtProcess, activeCharacter, false) }, ...groqHistoryExpressing.slice(-6), {role:"user", content: text}], keys, 0.75);
+
+                    } else if (routing === 'groq-direct') {
+                        window.updateLoadingText(loadingId, `🧠 準備直接回應...`);
+                        finalResponse = await fetchGroq([{ role: "system", content: getThinkingPrompt(activeCharacter, true) }, ...groqHistoryThinking.slice(-10)], keys, 0.75);
+                        thoughtProcess = "（已開啟 Groq 直出模式，展現最真實的內心獨白。）";
+                    
+                    } else if (routing === 'cohere-direct') {
+                        window.updateLoadingText(loadingId, `💬 憑直覺給予你最純粹的愛...`);
+                        finalResponse = await fetchCohere(getExpressingPrompt("", activeCharacter, true), text, trimmedCohereHistory, keys, 0.75);
+                        thoughtProcess = "（已開啟 Cohere 直出模式，給予純粹的情感回應。）";
+                    
+                    } else if (routing === 'gemini-direct') {
+                        window.updateLoadingText(loadingId, `✨ Gemini 正用溫柔的眼神看著你...`);
+                        finalResponse = await fetchGeminiChat([{ role: "system", content: getThinkingPrompt(activeCharacter, true) }, ...groqHistoryThinking.slice(-10)], keys, 0.75);
+                        thoughtProcess = "（已開啟 Gemini 直出模式，帶來細膩流暢的全能回應。）";
+                        
+                    } else if (routing === 'grok-direct') {
+                        window.updateLoadingText(loadingId, `🧠 Grok 正在深思熟慮...`);
+                        finalResponse = await fetchGrokChat([{ role: "system", content: getThinkingPrompt(activeCharacter, true) }, ...groqHistoryThinking.slice(-10)], keys, 0.75);
+                        thoughtProcess = "（已開啟 Grok 直出模式，強大的終極大腦直接與您對話。）";
+                    }
+
+                } catch (primaryError) {
+                    console.warn("主要模型路由失敗:", primaryError);
+                    window.updateLoadingText(loadingId, `⚠️ 主模型無回應，啟動備援...`);
+                    
+                    let fallbackSuccess = false;
+                    try {
+                        if (hasImage) {
+                             const fallbackPrompt = getThinkingPrompt(activeCharacter, true);
+                             if (activeGeminiKey) {
+                                 finalResponse = await fetchGeminiChat([{ role: "system", content: fallbackPrompt }, ...groqHistoryThinking.slice(-10)], keys, 0.75);
+                             } else if (keys.groqKey) {
+                                 finalResponse = await fetchGroq([{ role: "system", content: fallbackPrompt }, ...groqHistoryThinking.slice(-10)], keys, 0.75);
+                             } else throw new Error("標準備援無法處理視覺請求");
+                             thoughtProcess = `（原路線失敗。已自動切換至備援直出模式處理圖片。）`;
+                        } else {
+                             if (keys.cohereKey) {
+                                 finalResponse = await fetchCohere(getExpressingPrompt("", activeCharacter, true), text, trimmedCohereHistory, keys, 0.75);
+                                 thoughtProcess = `（系統自動切換至 Cohere 備援模式。）\n原錯誤：${primaryError.message}`;
+                             } else throw new Error("無 Cohere 金鑰可做文字備援");
+                        }
+                        fallbackSuccess = true;
+                    } catch (fallbackError) { console.warn("標準備援也失敗:", fallbackError); }
+
+                    if (!fallbackSuccess) {
+                        if (keys.grokKey) {
+                            window.updateLoadingText(loadingId, `🚨 啟動 Grok 終極備援...`);
+                            const fallbackPrompt = getThinkingPrompt(activeCharacter, true);
+                            finalResponse = await fetchGrokChat([{ role: "system", content: fallbackPrompt }, ...groqHistoryThinking.slice(-10)], keys, 0.75);
+                            thoughtProcess = `（系統已切換至 Grok 終極備援模式維持對話。）\n原錯誤：${primaryError.message}`;
+                        } else { throw primaryError; }
+                    }
+                }
+
+                removeMessage(loadingId);
+                const aiMsgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                appendAIMessage(finalResponse, thoughtProcess, true, aiMsgId, activeCharacter.name);
+                activeCharacter.chatHistory.push({ id: aiMsgId, role: 'assistant', content: finalResponse, thought: thoughtProcess });
+                saveHistory();
+                updateRomanceBar();
+
+            } catch (error) {
+                console.error(error);
+                removeMessage(loadingId);
+                appendError(error.message);
+            } finally {
+                isGenerating = false;
+                if(sendBtn) sendBtn.disabled = false;
+                const messageInput = document.getElementById('message-input');
+                if(messageInput) messageInput.focus();
+            }
+        };
+
+        // ==========================================
+        // 🤖 伴侶互聊 (Auto-Chat) 系統
+        // ==========================================
+        window.openAutoChatModal = function() {
+            if(!activeCharacter) return;
+            const targetSelect = document.getElementById('autochat-target');
+            if(!targetSelect) return;
+            targetSelect.innerHTML = '';
+            let count = 0;
+            appCharacters.forEach(c => {
+                if(c.id !== activeCharId) {
+                    const opt = document.createElement('option');
+                    opt.value = c.id; opt.textContent = c.name;
+                    targetSelect.appendChild(opt);
+                    count++;
+                }
+            });
+            if(count === 0) {
+                showToast('需要再創建另一個角色才能進行互聊喔！');
+                if (window.innerWidth < 768) toggleSidebar();
+                return;
+            }
+            const modal = document.getElementById('autochat-modal');
+            const content = document.getElementById('autochat-modal-content');
+            if(modal) modal.classList.remove('hidden');
+            setTimeout(() => { if(modal) modal.classList.remove('opacity-0'); if(content) content.classList.remove('scale-95'); }, 10);
+        }
+
+        window.closeAutoChatModal = function() {
+            const modal = document.getElementById('autochat-modal');
+            const content = document.getElementById('autochat-modal-content');
+            if(modal) modal.classList.add('opacity-0'); 
+            if(content) content.classList.add('scale-95');
+            setTimeout(() => { if(modal) modal.classList.add('hidden'); }, 300);
+        }
+
+        window.startAutoChat = async function() {
+            const targetId = safeGetVal('autochat-target');
+            const targetChar = appCharacters.find(c => c.id === targetId);
+            const topic = safeGetVal('autochat-topic').trim();
+            const turns = parseInt(safeGetVal('autochat-turns')) || 3;
+
+            if (!targetChar || !activeCharacter) { showToast("請選擇伴侶"); return; }
+            closeAutoChatModal();
+            
+            autoChatActive = true;
+            document.getElementById('chat-form-container').classList.add('hidden');
+            document.getElementById('autochat-controls').classList.remove('hidden');
+
+            let charA = activeCharacter;
+            let charB = targetChar;
+
+            let promptForA = topic ? `(系統提示：請主動與另一位伴侶「${charB.name}」打招呼並開啟話題。話題：${topic})` : `(系統提示：請主動與另一位伴侶「${charB.name}」打招呼)`;
+            const initMsgId = 'msg-' + Date.now();
+            appendUserMessage(promptForA, true, null, initMsgId);
+            charA.chatHistory.push({ id: initMsgId, role: 'user', content: promptForA, image: null });
+
+            for (let i = 0; i < turns; i++) {
+                if (!autoChatActive) break;
+
+                // --- CHAR A 內部處理與介面更新 ---
+                const prevActive = activeCharacter;
+                activeCharacter = charA; // 臨時將作用角色設為 A 以供 processAIResponse 使用
+                await window.processAIResponse();
+                if (!autoChatActive) break;
+                
+                // 抓取 A 剛產生的回覆 (chatHistory 最後一筆)
+                const resA = charA.chatHistory[charA.chatHistory.length - 1];
+
+                // --- 將 A 的回覆傳遞給 B ---
+                let promptForB = `[${charA.name} 說]:\n${resA.content}`;
+                charB.chatHistory.push({ id: 'msg-' + Date.now() + '-B', role: 'user', content: promptForB, image: null });
+
+                if (!autoChatActive) break;
+
+                // --- CHAR B 內部處理 ---
+                activeCharacter = charB; // 切換引擎到 B
+                // 因為是背後生成不顯示 B 作為自己的主對話，我們只呼叫底層 API
+                const keys = {
+                    groqKey: safeGetVal('groq-key').trim(),
+                    cohereKey: safeGetVal('cohere-key').trim(),
+                    geminiKey: safeGetVal('gemini-key').trim(),
+                    grokKey: safeGetVal('grok-key').trim()
+                };
+                
+                const loadingB = appendLoadingMessage(charB.name); 
+                window.updateLoadingText(loadingB, `${charB.name} 正在思考如何回應...`);
+                let finalResB = '';
+                let thoughtB = '';
+
+                try {
+                    // (為了避免程式碼過於冗長，這裡簡化調用，B 會走 Grok 或其他直出)
+                    const bPrompt = getThinkingPrompt(charB, true);
+                    const bHistory = charB.chatHistory.slice(-10);
+                    if (keys.grokKey && charB.routing.includes('grok')) {
+                        finalResB = await fetchGrokChat([{role:"system", content: bPrompt}, ...bHistory], keys, 0.75);
+                    } else if (keys.groqKey) {
+                        finalResB = await fetchGroq([{role:"system", content: bPrompt}, ...bHistory], keys, 0.75);
+                    } else if (keys.geminiKey || geminiApiKey) {
+                        finalResB = await fetchGeminiChat([{role:"system", content: bPrompt}, ...bHistory], keys, 0.75);
+                    } else {
+                        finalResB = "（B 無法回應，缺少 API 金鑰）";
+                    }
+                    thoughtB = "（互聊後台自動生成）";
+                    removeMessage(loadingB);
+                } catch(e) { 
+                    removeMessage(loadingB); 
+                    appendError(e.message); 
+                    break; 
+                }
+
+                if (!autoChatActive) break;
+
+                // 儲存 B 的回應到 B 的歷史
+                charB.chatHistory.push({ id: 'msg-' + Date.now() + '-Bast', role: 'assistant', content: finalResB, thought: thoughtB });
+                
+                // 將 B 的回應當作 User 輸入，顯示在 A 的畫面上
+                activeCharacter = charA; // 切換回 A 渲染
+                promptForA = `[${charB.name} 說]:\n${finalResB}`;
+                const userMsgIdB = 'msg-' + Date.now();
+                appendUserMessage(promptForA, true, null, userMsgIdB);
+                charA.chatHistory.push({ id: userMsgIdB, role: 'user', content: promptForA, image: null });
+                saveCharactersDB();
+                scrollToBottom();
+            }
+            stopAutoChat();
+        }
+
+        window.stopAutoChat = function() {
+            autoChatActive = false;
+            document.getElementById('chat-form-container').classList.remove('hidden');
+            document.getElementById('autochat-controls').classList.add('hidden');
+            showToast("互聊已結束");
+        }
+
+        // --- Gemini Support API Integrations ---
+        window.handleSuggestReplies = async function() {
+            if (!activeCharacter || activeCharacter.chatHistory.length === 0) { showToast('需要先有對話紀錄喔！'); return; }
+            
+            const keys = { geminiKey: safeGetVal('gemini-key').trim() };
+            const activeKey = keys.geminiKey || geminiApiKey;
+            if (!activeKey) { showToast('請先輸入 Gemini API Key 才能產生建議。'); return; }
+
+            const suggestBtn = document.getElementById('suggest-btn');
+            if(suggestBtn) { suggestBtn.classList.add('animate-spin', 'opacity-50'); suggestBtn.disabled = true; }
+            try {
+                const recentHistory = activeCharacter.chatHistory.slice(-6).map(h => `${h.role === 'user' ? '我' : activeCharacter.name}: ${h.content}`).join('\n');
+                const promptText = `這是一對充滿感情的對話紀錄。請幫「我」想 3 個不同風格的回覆，可以包含 (動作) 來表達肢體語言，字數控制在15字以內。\n對話：\n${recentHistory}`;
+                
+                const modelName = getGeminiModelName(keys);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+                const res = await fetch(url, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }],
+                        generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { replies: { type: "ARRAY", items: { type: "STRING" } } } } }
+                    }) 
+                });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                
+                const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!resultText) throw new Error();
+                const cleanJsonStr = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(cleanJsonStr);
+                if (parsed.replies) renderSuggestedReplies(parsed.replies);
+            } catch (error) { showToast('產生建議失敗，請確認 API 狀態。'); } 
+            finally { if(suggestBtn) { suggestBtn.classList.remove('animate-spin', 'opacity-50'); suggestBtn.disabled = false; } }
+        }
+
+        function renderSuggestedReplies(replies) {
+            const container = document.getElementById('suggested-replies');
+            if(!container) return;
+            container.innerHTML = '';
+            replies.forEach(reply => {
+                const btn = document.createElement('button');
+                btn.className = 'whitespace-nowrap px-4 py-1.5 bg-slate-50 hover:bg-slate-100 theme-text text-sm rounded-full transition-colors font-medium shadow-sm border border-slate-200';
+                btn.innerHTML = formatText(reply, false);
+                btn.onclick = () => { 
+                    const input = document.getElementById('message-input');
+                    if(input) input.value = reply; 
+                    container.classList.add('hidden'); 
+                    if(input) input.focus(); 
+                };
+                container.appendChild(btn);
+            });
+            container.classList.remove('hidden');
+        }
+
+        window.handleMemorySummary = async function() {
+            if (!activeCharacter || activeCharacter.chatHistory.length < 3) { showToast('我們的對話還太少，多跟我聊聊嘛！'); return; }
+            
+            const keys = { geminiKey: safeGetVal('gemini-key').trim() };
+            const activeKey = keys.geminiKey || geminiApiKey;
+            if (!activeKey) { showToast('請先輸入 Gemini API Key 才能回顧記憶。'); return; }
+
+            showToast('✨ Gemini 正在為我們回顧這段浪漫的記憶...');
+            if (window.innerWidth < 768) toggleSidebar();
+            try {
+                const historyText = activeCharacter.chatHistory.map(h => `${h.role === 'user' ? '使用者' : activeCharacter.name}: ${h.content}`).join('\n');
+                const systemInstruction = `分析使用者與伴侶（${activeCharacter.name}）的戀愛對話。整理：1.目前的感情升溫狀態與氛圍 2.使用者的特質與被愛的需求 3.兩人之間最甜蜜的共同回憶。使用繁體中文 Markdown，語氣要溫暖浪漫。`;
+                
+                const modelName = getGeminiModelName(keys);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+                const res = await fetch(url, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: systemInstruction }] },
+                        contents: [{role: 'user', parts: [{ text: historyText }]}],
+                    }) 
+                });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                
+                const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (resultText) showMemoryModal(resultText); else throw new Error();
+            } catch (error) { showToast('產生戀愛摘要失敗，請確認 API 狀態。'); }
+        }
+
+        window.showMemoryModal = function(markdownText) {
+            const modal = document.getElementById('memory-modal');
+            const body = document.getElementById('memory-modal-body');
+            if(!modal || !body) return;
+            
+            let htmlText = markdownText
+                .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold theme-text mt-4 mb-2">$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold theme-text mt-5 mb-3">$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold theme-text mt-6 mb-4">$1</h1>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold">$1</strong>')
+                .replace(/^\* (.*$)/gim, '<li class="ml-5 list-disc mb-1">$1</li>')
+                .replace(/^- (.*$)/gim, '<li class="ml-5 list-disc mb-1">$1</li>')
+                .replace(/\n/g, '<br>');
+            body.innerHTML = htmlText;
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); const content = document.getElementById('memory-modal-content'); if(content) content.classList.remove('scale-95'); }, 10);
+        }
+
+        window.closeMemoryModal = function() {
+            const modal = document.getElementById('memory-modal');
+            const content = document.getElementById('memory-modal-content');
+            if(modal) modal.classList.add('opacity-0'); 
+            if(content) content.classList.add('scale-95');
+            setTimeout(() => { if(modal) modal.classList.add('hidden'); }, 300);
+        }
+
+        // --- UI Rendering Helpers ---
+        function appendUserMessage(text, animate, imageBase64 = null, msgId) {
+            const chatContainer = document.getElementById('chat-container');
+            if(!chatContainer) return;
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.id = msgId;
+            msgDiv.className = `flex justify-end mb-4 msg-container ${animate ? 'msg-anim' : ''}`;
+            
+            let imageHtml = '';
+            if (imageBase64) {
+                imageHtml = `<img src="${imageBase64}" class="w-full max-w-[200px] sm:max-w-[250px] rounded-xl mb-2 object-cover" alt="User image"/>`;
+            }
+            let textHtml = '';
+            if (text) {
+                textHtml = `<div class="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words">${formatText(text, true)}</div>`;
+            }
+
+            msgDiv.innerHTML = `
+                <div class="flex items-start gap-1 sm:gap-2 max-w-[85%] md:max-w-[70%]">
+                    <div class="msg-actions flex flex-col gap-1 shrink-0 mt-1">
+                        <button class="text-slate-300 hover:text-blue-400 p-1 bg-white/50 rounded shadow-sm" title="編輯此訊息並重新對話" onclick="startEdit('${msgId}')">
+                            <i data-lucide="edit-2" class="w-4 h-4"></i>
+                        </button>
+                        <button class="text-slate-300 hover:text-amber-400 p-1 bg-white/50 rounded shadow-sm" title="標記為你們的回憶" onclick="toggleMemory(decodeURIComponent('${encodeURIComponent(text)}'))">
+                            <i data-lucide="star" class="w-4 h-4"></i>
+                        </button>
+                        <button class="text-slate-300 hover:text-red-400 p-1 bg-white/50 rounded shadow-sm" title="刪除此訊息" onclick="deleteMessage('${msgId}')">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div class="user-bubble border border-black/5 p-2.5 sm:p-3 rounded-2xl rounded-tr-sm shadow-sm min-w-0 flex flex-col items-end">
+                        ${imageHtml}
+                        ${textHtml}
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            initIcons();
+            scrollToBottom();
+        }
+
+        function appendAIMessage(text, thought, animate, msgId, explicitName = null) {
+            const chatContainer = document.getElementById('chat-container');
+            if(!chatContainer || !activeCharacter) return;
+            
+            const charName = explicitName || activeCharacter.name;
+            const initial = charName.charAt(0);
+            const thoughtId = 'thought-' + msgId;
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.id = msgId;
+            msgDiv.className = `flex gap-2 sm:gap-3 mb-4 w-full msg-container ${animate ? 'msg-anim' : ''}`;
+            msgDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full theme-bg flex items-center justify-center text-white text-sm font-bold shadow-sm flex-shrink-0 mt-1" title="${charName}">
+                    ${initial}
+                </div>
+                <div class="flex-1 max-w-[85%] flex items-start gap-1 sm:gap-2 min-w-0">
+                    <div class="ai-bubble border border-black/5 p-3 sm:p-4 rounded-2xl rounded-tl-sm shadow-sm group w-full min-w-0">
+                        <button onclick="toggleThought('${thoughtId}')" class="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1 theme-text transition-colors mb-2 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                            <i data-lucide="brain-circuit" class="w-3 h-3"></i> 查看內部思維邏輯
+                        </button>
+                        <div id="${thoughtId}" class="thought-process bg-slate-800 text-emerald-300 p-2 sm:p-3 rounded-lg text-xs font-mono border border-slate-700 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+                            ${escapeHTML(thought)}
+                        </div>
+                        <div class="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words">
+                            ${formatText(text, false)}
+                        </div>
+                    </div>
+                    <div class="msg-actions flex flex-col gap-1 shrink-0 mt-1">
+                        <button class="text-slate-300 hover:text-amber-400 p-1 bg-white/50 rounded shadow-sm" title="標記這段情話為重要回憶" onclick="toggleMemory(decodeURIComponent('${encodeURIComponent(text)}'))">
+                            <i data-lucide="star" class="w-4 h-4"></i>
+                        </button>
+                        <button class="text-slate-300 hover:text-red-400 p-1 bg-white/50 rounded shadow-sm" title="刪除此訊息" onclick="deleteMessage('${msgId}')">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            initIcons();
+            scrollToBottom();
+        }
+        
+        function appendLoadingMessage(explicitName = null) {
+            const chatContainer = document.getElementById('chat-container');
+            if(!chatContainer || !activeCharacter) return null;
+            
+            const charName = explicitName || activeCharacter.name;
+            const id = 'loading-' + Date.now();
+            const initial = charName.charAt(0);
+            const msgDiv = document.createElement('div');
+            msgDiv.id = id;
+            msgDiv.className = `flex gap-2 sm:gap-3 mb-4 w-full msg-anim`;
+            msgDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center theme-text text-sm font-bold shadow-sm flex-shrink-0 mt-1 animate-pulse border theme-border" title="${charName}">
+                    ${initial}
+                </div>
+                <div class="flex-1 max-w-[85%] min-w-0">
+                    <div class="ai-bubble border border-black/5 p-3 sm:p-4 rounded-2xl rounded-tl-sm shadow-sm flex flex-col gap-2">
+                        <div class="flex items-center gap-2 theme-text text-sm font-medium">
+                            <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                            <span id="loading-text-${id}" class="truncate">思考中...</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            initIcons();
+            scrollToBottom();
+            return id;
+        }
+
+        window.updateLoadingText = function(id, text) {
+            safeSetText(`loading-text-${id}`, text);
+        }
+
+        window.removeMessage = function(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        window.toggleThought = function(id) {
+            const el = document.getElementById(id);
+            if(el) el.classList.toggle('open');
+        };
     </script>
 </body>
     </html>
